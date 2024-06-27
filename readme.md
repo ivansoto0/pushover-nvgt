@@ -7,7 +7,7 @@ Pushover is a notification service that simplifies sending push notifications to
 To get started, visit [Pushover API](https://pushover.net/api) and obtain an application token.
 You must supply your token when initializing instances of your pushover classes, like this:
 
-```cpp
+```nvgt
 #include "pushover.nvgt" // include your script.
 
 // your main function
