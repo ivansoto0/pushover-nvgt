@@ -1,0 +1,187 @@
+/*Pushover.nvgt
+Wrapper around the Pushover API.
+https://pushover.net/api
+By Ivan Soto.
+*/
+const string pushover_api_url = "https://api.pushover.net/1";
+
+enum notification_priority_modes {
+	notification_lowest_priority = -2,
+	notification_low_priority = -1,
+	notification_normal_priority = 0,
+	notification_high_priority = 1,
+	notification_highest_priority = 2
+}
+class urgent_notification_receipt {
+	int delivered = 1;
+	int acknowledged = 0;
+	int expired = 0;
+	float last_acknowledged;
+	string last_acknowledged_by;
+	string last_acknowledged_device;
+	float acknowledged_at;
+	timer stchecktimer;
+	string id;
+	int checked = 0;
+	urgent_notification_receipt(string id) {
+		this.id = id;
+	}
+}
+class pushover{
+	private string application_token;
+	string notification_sound = "pushover";
+	private string user_key;
+	string[] notification_sounds = {"pushover", "bike", "bugle", "cashregister", "classical", "cosmic", "falling", "gamelan", "incoming", "intermission", "magic", "mechanical", "pianobar", "siren", "spacealarm", "tugboat", "alien", "climb", "persistent", "echo", "updown"};
+	urgent_notification_receipt @[] receipts;
+	notification_receipt_callback@receipt_callback = null;
+	pushover(const string app_token) {
+		this.application_token = app_token;
+	}
+	bool set_user_key(const string&in user_key) {
+		if(user_key.is_empty()) return false;
+		this.user_key = user_key;
+		return true;
+	}
+	bool set_callback(notification_receipt_callback@cb) {
+		if(@cb == null) return false;
+		@this.receipt_callback = @cb;
+		return true;
+	}
+	bool is_valid_notification_sound(string&in name) {
+		return this.notification_sounds.find(name)>-1;
+	}
+	bool set_notification_sound(string&in name) {
+		if(!this.is_valid_notification_sound(name)) return false;
+		this.notification_sound = name;
+		return true;
+	}
+	void pull() {
+		for(uint i = 0; i<this.receipts.length(); i+=1) this.check_receipt_status(this.receipts[i]);
+	}
+	bool check_receipt_status(urgent_notification_receipt@receipt) {
+		if(@receipt == null) return false;
+		if(receipt.checked == 1) return false;
+		if(this.application_token.is_empty()) return false;
+		if(receipt.stchecktimer.elapsed<5000) return false;
+		receipt.stchecktimer.restart();
+		dictionary o;
+		o.set("token", this.application_token);
+		http_response resp;
+		string r = make_pushover_get_request(o, "receipts/"+receipt.id+".json", resp);
+		if(resp.status != HTTP_OK) return false;
+		json_object @ json = parse_json(r);
+		int status = json["status"];
+		if(status != 1) return false;
+		if(json.exists("acknowledged")) receipt.acknowledged = json["acknowledged"];
+		if(receipt.acknowledged == 1) {
+			if(json.exists("acknowledged_at")) receipt.acknowledged_at = json["acknowledged_at"];
+			if(json.exists("acknowledged_by")) receipt.last_acknowledged_by = json["acknowledged_by"];
+			if(json.exists("acknowledged_by_device")) receipt.last_acknowledged_device = json["acknowledged_by_device"];
+		}
+		if(json.exists("expired")) receipt.expired = json["expired"];
+		if(@this.receipt_callback != null and receipt.acknowledged == 1 and receipt.checked != 1) {
+			int r = this.receipt_callback(receipt);
+		}
+		if(receipt.acknowledged == 1) receipt.checked = 1;
+		return true;
+	}
+	bool notify(string&in message, string&in title = "", int priority =notification_normal_priority, int retri_seconds = 30, int expire_seconds = 300) {
+		if(priority<-3 or priority>2) return false;
+		if(this.application_token.is_empty() or this.user_key.is_empty() or message.is_empty()) return false;
+		if(!title.is_empty() and title.length()>100) return false;
+		if(message.length()>1024) return false;
+		dictionary o;
+		o.set("token", this.application_token);
+		o.set("user", this.user_key);
+		if(!title.is_empty()) o.set("title", title);
+		o.set("message", message);
+		o.set("priority", priority);
+		if(priority == 2) {
+			o.set("retry", retri_seconds);
+			o.set("expire", expire_seconds);
+		}
+		o.set("sound", this.notification_sound);
+		http_response resp;
+		string response = make_pushover_post_request(o, "messages.json", resp);
+		if(resp.status != HTTP_OK) return false;
+		json_object@json = parse_json(response);
+		int success = json["status"]; //will update later, too high.
+		if(json.exists("receipt")) {
+			string r = json["receipt"];
+			this.receipts.insert_last(urgent_notification_receipt(r));
+			this.receipts[this.receipts.length()-1].delivered = 1;
+		}
+		return success == 1;
+	}
+}
+
+string make_pushover_post_request(dictionary@o, const string&in where, http_response&out resp, int mode = 1) {
+	if(@o == null) return "";
+	if(o.get_size()<=0) return "";
+	string[] v;
+	string[] d = o.get_keys();
+	for(uint i = 0; i<d.length(); i+=1) {
+		string temp;
+		o.get(d[i], temp);
+		if(temp != "") v.insert_last(d[i]+"="+temp);
+		else {
+			int temp2 = -1;
+			o.get(d[i], temp2);
+			if(temp2 != -1) v.insert_last(d[i]+"="+temp2);
+		}
+	}
+	if(v.length()<=0) return false;
+	string request = string_join(v, "&");
+	async <string>@response = async<string>(url_post, pushover_api_url+"/"+where, request, resp);
+	string r;
+	while(true) {
+		if(response.complete) {
+			r = response.value;
+			break;
+		}
+	}
+	return r;
+}
+
+string make_pushover_get_request(dictionary@o, const string&in where, http_response&out resp) {
+	if(@o == null) return "";
+	if(o.get_size()<=0) return "";
+	string[] v;
+	string[] d = o.get_keys();
+	for(uint i = 0; i<d.length(); i+=1) {
+		string temp;
+		o.get(d[i], temp);
+		if(temp != "") v.insert_last(d[i]+"="+temp);
+		else {
+			int temp2 = -1;
+			o.get(d[i], temp2);
+			if(temp2 != -1) v.insert_last(d[i]+"="+temp2);
+		}
+	}
+	if(v.length()<=0) return false;
+	string request = string_join(v, "&");
+	async <string>@response = async<string>(url_get, pushover_api_url+"/"+where+"?"+request, resp);
+	string r;
+	while(true) {
+		if(response.complete) {
+			r = response.value;
+			break;
+		}
+	}
+	return r;
+}
+
+funcdef int notification_receipt_callback(urgent_notification_receipt@);
+
+//utility function, nvgt's built-in function appears to be broken.
+string string_join(string[]@ arr, string delimiter=" ", int start_index = 0)
+{
+	if(arr.length()<=0 or delimiter.is_empty()) return "";
+	string val;
+	for(int i=start_index; i<arr.length()-1; i++)
+	{
+		val += arr[i]+delimiter;
+	}
+	val += arr[arr.length()-1];
+	return val;
+}

@@ -1,0 +1,32 @@
+#include"pushover.nvgt"
+#include"speech.nvgt"
+sound snd;
+void main() {
+	show_window("This is a test");
+	wait(2000);
+	pushover p("your_app_token");
+	p.set_user_key("your_user_key");
+	p.set_callback(n_callback);
+	string notification = input_box("notification", "Enter notification text");
+	if(notification.is_empty()) exit();
+	snd.load("receipt.ogg");
+	bool success = p.notify(notification);
+	alert("returned", (success?"true":"false"));
+	//send an urgent notification.
+	success = p.notify("This is an urgent notification! Please respond", "error!", notification_highest_priority);
+	if(!success) {
+		alert("error", "Couldn't send urgent notification");
+		exit();
+	}
+	while(true) {
+		wait(5);
+		p.pull();
+		if(key_pressed(KEY_ESCAPE)) exit();
+	}
+}
+int n_callback(urgent_notification_receipt@receipt) {
+	if(@receipt == null) return -1;
+	snd.play();
+	speak("Your notification was just acknowledged by "+receipt.last_acknowledged_device);
+	return 0;
+}
