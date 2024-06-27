@@ -105,7 +105,7 @@ class pushover{
 		string response = make_pushover_post_request(o, "messages.json", resp);
 		if(resp.status != HTTP_OK) return false;
 		json_object@json = parse_json(response);
-		int success = json["status"]; //will update later, too high.
+		int success = json["status"];
 		if(json.exists("receipt")) {
 			string r = json["receipt"];
 			this.receipts.insert_last(urgent_notification_receipt(r));
