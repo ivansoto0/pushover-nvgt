@@ -31,7 +31,9 @@ class pushover{
 	private string application_token;
 	string notification_sound = "pushover";
 	private string user_key;
-	string[] notification_sounds = {"pushover", "bike", "bugle", "cashregister", "classical", "cosmic", "falling", "gamelan", "incoming", "intermission", "magic", "mechanical", "pianobar", "siren", "spacealarm", "tugboat", "alien", "climb", "persistent", "echo", "updown"};
+	string[] default_notification_sounds = {"pushover", "bike", "bugle", "cashregister", "classical", "cosmic", "falling", "gamelan", "incoming", "intermission", "magic", "mechanical", "pianobar", "siren", "spacealarm", "tugboat", "alien", "climb", "persistent", "echo", "updown"};
+	string[] custom_notification_sounds;
+	string[] notification_sounds;
 	urgent_notification_receipt @[] receipts;
 	notification_receipt_callback@receipt_callback = null;
 	pushover(const string app_token) {
@@ -50,13 +52,48 @@ class pushover{
 	bool is_valid_notification_sound(string&in name) {
 		return this.notification_sounds.find(name)>-1;
 	}
+	string[] get_notification_sounds(bool refresh = false) {
+		string[] r;
+		r.insert(0, this.default_notification_sounds);
+		if(refresh) {
+			string[] custom = this.get_custom_app_sounds_list();
+			if(custom.length()>0) r.insert(r.length(), custom);
+		}
+		return r;
+	}
+	void initialize(bool check_custom_sounds = true) {
+		this.notification_sounds = this.get_notification_sounds(check_custom_sounds);
+	}
 	bool set_notification_sound(string&in name) {
 		if(!this.is_valid_notification_sound(name)) return false;
 		this.notification_sound = name;
 		return true;
 	}
+	string[] get_custom_app_sounds_list() {
+		json_object@ json = this.get_custom_app_sounds();
+		string[] lst;
+		if(@json == null) return lst;
+		json_object@sounds = json("sounds");
+		string[] k = sounds.get_keys();
+		if(k.length()<=0) return lst;
+		for(uint i = 0; i<k.length(); i+=1) {
+			if(this.default_notification_sounds.find(k[i])>-1) continue;
+			lst.insert_last(k[i]);
+		}
+		return lst;
+	}
+	json_object@get_custom_app_sounds() {
+		if(this.application_token.is_empty()) return null;
+		http_response resp;
+		dictionary o;
+		o.set("token", this.application_token);
+		string r = make_pushover_get_request(o, "sounds.json", resp);
+		if(resp.status != HTTP_OK) return null;
+		return parse_json(r);
+	}
 	void pull() {
-		for(uint i = 0; i<this.receipts.length(); i+=1) this.check_receipt_status(this.receipts[i]);
+		uint len = this.receipts.length();
+		for(uint i = 0; i<len; i+=1) this.check_receipt_status(this.receipts[i]);
 	}
 	bool check_receipt_status(urgent_notification_receipt@receipt) {
 		if(@receipt == null) return false;
@@ -105,7 +142,7 @@ class pushover{
 		string response = make_pushover_post_request(o, "messages.json", resp);
 		if(resp.status != HTTP_OK) return false;
 		json_object@json = parse_json(response);
-		int success = json["status"];
+		int success = json["status"]; //will update later, too high.
 		if(json.exists("receipt")) {
 			string r = json["receipt"];
 			this.receipts.insert_last(urgent_notification_receipt(r));
