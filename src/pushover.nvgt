@@ -30,7 +30,7 @@ class urgent_notification_receipt {
 class pushover{
 	private string application_token;
 	string notification_sound = "pushover";
-	private string user_key;
+	private string[] user_keys;
 	string[] default_notification_sounds = {"pushover", "bike", "bugle", "cashregister", "classical", "cosmic", "falling", "gamelan", "incoming", "intermission", "magic", "mechanical", "pianobar", "siren", "spacealarm", "tugboat", "alien", "climb", "persistent", "echo", "updown"};
 	string[] custom_notification_sounds;
 	string[] notification_sounds;
@@ -39,9 +39,10 @@ class pushover{
 	pushover(const string app_token) {
 		this.application_token = app_token;
 	}
-	bool set_user_key(const string&in user_key) {
+	bool add_user_key(const string&in user_key) {
 		if(user_key.is_empty()) return false;
-		this.user_key = user_key;
+		if(this.user_keys.find(user_key)>-1) return false;
+		this.user_keys.insert_last(user_key);
 		return true;
 	}
 	bool set_callback(notification_receipt_callback@cb) {
@@ -124,12 +125,12 @@ class pushover{
 	}
 	bool notify(string&in message, string&in title = "", int priority =notification_normal_priority, int retri_seconds = 30, int expire_seconds = 300) {
 		if(priority<-3 or priority>2) return false;
-		if(this.application_token.is_empty() or this.user_key.is_empty() or message.is_empty()) return false;
+		if(this.application_token.is_empty() or this.user_keys.length()<=0 or message.is_empty()) return false;
 		if(!title.is_empty() and title.length()>100) return false;
 		if(message.length()>1024) return false;
 		dictionary o;
 		o.set("token", this.application_token);
-		o.set("user", this.user_key);
+		o.set("user", string_join(this.user_keys, ","));
 		if(!title.is_empty()) o.set("title", title);
 		o.set("message", message);
 		o.set("priority", priority);

@@ -5,7 +5,7 @@ void main() {
 	show_window("This is a test");
 	wait(2000);
 	pushover p("your_app_token");
-	p.set_user_key("your_user_key");
+	p.add_user_key("your_user_key");
 	p.set_callback(n_callback);
 	string notification = input_box("notification", "Enter notification text");
 	if(notification.is_empty()) exit();
