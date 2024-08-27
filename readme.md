@@ -16,6 +16,6 @@ void main() {
 	pushover p(app_token);
 	
 	// obtain your device's user ID and set it, like so
-	p.set_user_key("key");
+	p.add_user_key("key");
 	p.notify("This is a test");
 }
